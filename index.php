@@ -11,11 +11,21 @@ require __DIR__ . "/vendor/autoload.php";
 error_reporting(E_ALL);
 ini_set('display_errors', '1');
 
+setlocale(LC_TIME, "fr_FR");
+
+$xmlDirPath = __DIR__ . '/xml/';
+
 use Goutte\Client;
 use Symfony\Component\Filesystem\Filesystem;
 
-$client = new Client();
 
+
+$localhost = 'http://localhost:9777';
+
+// Create default dir
+
+$fs = new Filesystem();
+$resCreation = $fs->mkdir($xmlDirPath);
 
 // Theatre de l'ile Agenda
 /*
@@ -75,30 +85,89 @@ $crawler->filter('#listing > div:not(.node-unpublished)')->each(function ($node)
 //https://www.codeofaninja.com/demos/display-facebook-events-level-1/upcoming.php?fb_page_id=290477564434561
 // REX : https://www.facebook.com/pg/therex20152015/events/?ref=page_internal
 
-$filePath = __DIR__ . '/xml/';
-$fileName = 'xmlLog.xml';
 
-// create new file if not exist
-$mainNode = new \SimpleXMLElement('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><agenda></agenda>');
+function createXmlFile($pageName){
+  return $pageName.'.xml';
+}
 
-$productNode = $mainNode->addChild('eventList');
+function crawlbot($page = 'sortir'){
 
-// Sortir Agenda
-$crawler = $client->request('GET', 'http://localhost:8888/Goutte/sortir.html');
+  $mainNode = new \SimpleXMLElement('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><agenda></agenda>');
+  $productNode = $mainNode->addChild('eventList');
+  
+  $client = new Client();
 
-echo 'https://sortir.nc';
+  $crawler = $client->request('GET', $localhost.'/'.$page.'.html');
 
-// Get data from the page
-$crawler->filter('#main_container .wpb_content_element div.events_holder')->each(function ($node) use (&$productNode){
-    $node->filter('h2')->each(function ($nodeTitle) use (&$productNode){
-        $rN = $productNode->addChild('evenement');
-        $rN->addChild('titleEvent', $nodeTitle->text());
-        $rN->addChild('sourceLink', $nodeTitle->attr('href'));
-    });
-});
+  echo '<pre>Données</pre>';
+
+  // Get data from the page
+  $crawler->filter('#main_container .wpb_content_element div.events_holder')->each(function ($node) use (&$productNode){
+      $node->filter('h2')->each(function ($nodeTitle) use (&$productNode){
+          $rN = $productNode->addChild('evenement');
+          $rN->addChild('titleEvent', $nodeTitle->text());
+          $rN->addChild('sourceLink', $nodeTitle->attr('href'));
+      });
+  });
+
+  $fs = new Filesystem();
+  $fileName = createXmlFile($page);
+  $mainNode->asXML($xmlfilePath . $fileName);
+}
 
 
-$fs = new Filesystem();
-$resCreation = $fs->mkdir($filePath);
+dataCentreDart($localhost, 'centredart', $xmlDirPath);
 
-$mainNode->asXML($filePath . $fileName);
+function dataCentreDart($localhost, $page = 'centredart', $xmlDirPath){
+  $client = new Client();
+  
+  $xmlNode = new \SimpleXMLElement('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><agenda></agenda>');
+  $productNode = $xmlNode->addChild('eventList');
+  
+  $crawler = $client->request('GET', $localhost.'/agenda-centredart.html');
+
+  // Get the latest post in this category and display the titles
+  $crawler->filter('#listing > div:not(.node-unpublished)')->each(function ($node) use (&$productNode) {
+      
+      $rN = $productNode->addChild('evenement');
+      $rN->addChild('title', $node->filter('h3')->text());
+      
+      //Date de l'évenement
+      $dateEvent = $node->filter('.cat_date > .date')->text();
+      $dateExplode = explode('/',$dateEvent);
+      
+      if(is_array($dateExplode) && count($dateExplode) > 1){
+        $dateEventStart = convertDate(trim($dateExplode[0]));
+        $dateEventEnd = convertDate(trim($dateExplode[1]));
+      }else{
+        $dateEventStart = convertDate($dateEvent);
+      }
+      
+      $rN->addChild('dateStart', $dateEventStart);
+      if(isset($dateEventEnd)){
+        $rN->addChild('dateEnd', $dateEventEnd);
+      }
+      
+      $rN->addChild('morelink', "http://www.noumea.nc/node/".explode('node-',$node->attr('id'))[1]);
+      $rN->addChild('sourceLink', $node->filter('h3')->attr('href'));
+
+      //$categorieEvent = $node->filter('.cat_date > .categorie')->text();
+     /*
+      $node->filter('h3')->each(function ($nodeTitle) {
+          echo $nodeTitle->text().'<br>';
+          echo $nodeTitle->attr('href');
+    
+      });*/
+  });
+  
+  $fs = new Filesystem();
+  $fileName = createXmlFile($page);
+  $xmlNode->asXML($xmlDirPath . $fileName);
+}
+
+function convertDate($inputDate){
+  //echo strtotime($inputDate);
+  setlocale(LC_TIME, 'fr_FR');
+  if(isset($inputDate))
+    return strftime("%d/%m/%Y",strtotime($inputDate));
+}
